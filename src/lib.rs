@@ -52,7 +52,7 @@ macro_rules! impl_trait_for_ref {
             $( $body:tt )*
         }
     ) => {
-        impl<'f, F: $name + ?Sized> $name for &'f dyn F {
+        impl<'f, F: $name + ?Sized> $name for &'f F {
             visit_members!( call_via_deref; $($body)* );
         }
     };
@@ -66,8 +66,30 @@ macro_rules! impl_trait_for_mut_ref {
             $( $body:tt )*
         }
     ) => {
-        impl<'f, F: $name + ?Sized> $name for &'f mut dyn F {
+        impl<'f, F: $name + ?Sized> $name for &'f mut F {
             visit_members!( call_via_deref; $($body)* );
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! trait_with_dyn_impls {
+    (
+        $( #[$attr:meta] )*
+        $vis:vis trait $name:ident { $( $body:tt )* }
+    ) => {
+        // emit the trait declaration
+        $( #[$attr] )*
+        $vis trait $name { $( $body )* }
+
+        // then implement it for Box and references
+        impl_trait_for_ref! {
+            $( #[$attr] )*
+            $vis trait $name { $( $body )* }
+        }
+        impl_trait_for_boxed! {
+            $( #[$attr] )*
+            $vis trait $name { $( $body )* }
         }
     };
 }
@@ -161,6 +183,21 @@ mod tests {
 
         assert_is_foo::<u32>();
         assert_is_foo::<Box<u32>>();
+        assert_is_foo::<Box<dyn Foo>>();
+    }
+
+    #[test]
+    fn full_implementation() {
+        trait_with_dyn_impls! {
+            trait Foo {
+                fn get_x(&self) -> u32;
+                fn execute(&self, expression: &str);
+            }
+        }
+
+        fn assert_is_foo<F: Foo>() {}
+
+        assert_is_foo::<&Foo>();
         assert_is_foo::<Box<dyn Foo>>();
     }
 }
