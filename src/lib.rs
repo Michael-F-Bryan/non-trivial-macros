@@ -15,6 +15,21 @@ macro_rules! visit_members {
 
         visit_members! { $callback; $($rest)* }
     };
+    (
+        $callback:ident;
+
+        $( #[$attr:meta] )*
+        fn $name:ident(&mut self $(, $arg_name:ident : $arg_ty:ty )*) $(-> $ret:ty)?;
+
+        $( $rest:tt )*
+    ) => {
+        $callback!(
+            $( #[$attr] )*
+            fn $name(&mut self $(, $arg_name : $arg_ty )*) $(-> $ret)?
+        );
+
+        visit_members! { $callback; $($rest)* }
+    };
     ($callback:ident;) => {};
 }
 
@@ -25,6 +40,14 @@ macro_rules! call_via_deref {
         fn $name:ident(&self $(, $arg_name:ident : $arg_ty:ty )*) $(-> $ret:ty)?
     ) => {
         fn $name(&self $(, $arg_name : $arg_ty )*) $(-> $ret)? {
+            (**self).$name( $($arg_name),* )
+        }
+    };
+    (
+        $( #[$attr:meta] )*
+        fn $name:ident(&mut self $(, $arg_name:ident : $arg_ty:ty )*) $(-> $ret:ty)?
+    ) => {
+        fn $name(&mut self $(, $arg_name : $arg_ty )*) $(-> $ret)? {
             (**self).$name( $($arg_name),* )
         }
     };
@@ -197,7 +220,22 @@ mod tests {
 
         fn assert_is_foo<F: Foo>() {}
 
-        assert_is_foo::<&Foo>();
+        assert_is_foo::<&dyn Foo>();
         assert_is_foo::<Box<dyn Foo>>();
+    }
+
+    #[test]
+    fn handle_mutable_and_immutable_self() {
+        trait Foo {
+            fn get_x(&self) -> u32;
+            fn execute(&mut self, expression: &str);
+        }
+
+        impl_trait_for_boxed! {
+            trait Foo {
+                fn get_x(&self) -> u32;
+                fn execute(&mut self, expression: &str);
+            }
+        }
     }
 }
