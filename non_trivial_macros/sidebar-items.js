@@ -1,0 +1,1 @@
+initSidebarItems({"macro":[["call_via_deref",""],["impl_trait_for_boxed",""],["impl_trait_for_mut_ref",""],["impl_trait_for_ref",""],["search_for_mut_self","Scans through a stream of tokens looking for `&mut self`. If nothing is found a callback is invoked."],["trait_with_dyn_impls",""],["visit_members",""]]});
