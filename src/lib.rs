@@ -95,6 +95,25 @@ macro_rules! impl_trait_for_mut_ref {
     };
 }
 
+/// Scans through a stream of tokens looking for `&mut self`. If nothing is
+/// found a callback is invoked.
+#[macro_export]
+macro_rules! search_for_mut_self {
+    // if we see `&mut self`, stop and don't invoke the callback
+    ($callback:ident!($($callback_args:tt)*); &mut self $($rest:tt)*) => { };
+    ($callback:ident!($($callback_args:tt)*); (&mut self $($other_args:tt)*) $($rest:tt)*) => { };
+
+    // haven't found it yet, drop the first item and keep searching
+    ($callback:ident!($($callback_args:tt)*); $_head:tt $($tokens:tt)*) => {
+        search_for_mut_self!($callback!( $($callback_args)* ); $($tokens)*);
+
+    };
+    // we completed without hitting `&mut self`, invoke the callback and exit
+    ($callback:ident!($($callback_args:tt)*);) => {
+        $callback!( $($callback_args)* )
+    }
+}
+
 #[macro_export]
 macro_rules! trait_with_dyn_impls {
     (
@@ -105,14 +124,21 @@ macro_rules! trait_with_dyn_impls {
         $( #[$attr] )*
         $vis trait $name { $( $body )* }
 
-        // then implement it for Box and references
-        impl_trait_for_ref! {
+        impl_trait_for_mut_ref! {
             $( #[$attr] )*
             $vis trait $name { $( $body )* }
         }
         impl_trait_for_boxed! {
             $( #[$attr] )*
             $vis trait $name { $( $body )* }
+        }
+
+        // we can only implement the trait for `&T` if there are NO `&mut self`
+        // methods
+        search_for_mut_self! {
+            impl_trait_for_ref!( $( #[$attr] )* $vis trait $name { $( $body )* } );
+
+            $( $body )*
         }
     };
 }
@@ -237,5 +263,55 @@ mod tests {
                 fn execute(&mut self, expression: &str);
             }
         }
+    }
+
+    #[test]
+    fn full_implementation_with_mut_methods() {
+        trait_with_dyn_impls! {
+            trait Foo {
+                fn execute(&mut self, expression: &str);
+            }
+        }
+
+        fn assert_is_foo<F: Foo>() {}
+
+        assert_is_foo::<&mut dyn Foo>();
+        assert_is_foo::<Box<dyn Foo>>();
+    }
+
+    #[test]
+    fn dont_invoke_the_callback_when_mut_self_found() {
+        search_for_mut_self! {
+            compile_error!("This callback shouldn't have been invoked");
+
+            &mut self asdf
+        }
+    }
+
+    #[test]
+    fn handle_mut_self_inside_parens() {
+        search_for_mut_self! {
+            compile_error!("This callback shouldn't have been invoked");
+
+            fn foo(&mut self);
+        }
+    }
+
+    #[test]
+    fn invoke_the_callback_if_search_for_mut_self_found() {
+        macro_rules! declare_struct {
+            ($name:ident) => {
+                struct $name;
+            };
+        }
+
+        search_for_mut_self! {
+            declare_struct!(Foo);
+
+            blah blah ... blah
+        }
+
+        // we should have declared Foo as a unit struct
+        let _: Foo;
     }
 }
